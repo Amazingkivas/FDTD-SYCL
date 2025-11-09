@@ -4,9 +4,6 @@
 
 namespace FDTD_sycl {
 
-template <typename T>
-using sycl_vector = std::vector<T, sycl::usm_allocator<T, sycl::usm::alloc::shared>>;
-
 class FDTD {
 protected:
     Parameters parameters;
@@ -17,9 +14,9 @@ protected:
     FP coef_E_dx, coef_E_dy, coef_E_dz;
     FP coef_B_dx, coef_B_dy, coef_B_dz;
 
-    sycl_vector<FP> Ex, Ey, Ez;
-    sycl_vector<FP> Bx, By, Bz;
-    sycl_vector<FP> Jx, Jy, Jz;
+    Field Ex, Ey, Ez;
+    Field Bx, By, Bz;
+    Field Jx, Jy, Jz;
 
     sycl::range<3> grid_range; 
     

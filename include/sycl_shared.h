@@ -6,11 +6,15 @@
 #include "Constants.h"
 #include "Enums.h"
 #include "FP.h"
+#include "allocate.h"
+#include "sycl_devices.h"
 
 namespace FDTD_sycl {
 
     using namespace FDTD_enums;
     using namespace FDTD_struct;
+
+    using Field = std::vector<FP, no_init_allocator<FP>>;
 
     inline int applyPeriodic(const int& i, const int& N) {
         int i_isMinusOne = (i < 0);
