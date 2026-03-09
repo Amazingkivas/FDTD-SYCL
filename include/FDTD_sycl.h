@@ -1,6 +1,7 @@
 #pragma once
 
 #include "sycl_shared.h"
+#include <cstddef>
 
 namespace FDTD_sycl {
 
@@ -18,15 +19,23 @@ protected:
     Field Bx, By, Bz;
     Field Jx, Jy, Jz;
 
-    sycl::range<3> grid_range; 
-    
-    sycl::buffer<FP, 3> bufBx, bufBy, bufBz;
-    sycl::buffer<FP, 3> bufEx, bufEy, bufEz;
-    sycl::buffer<FP, 3> bufJx, bufJy, bufJz;
+    std::size_t total_size;
+    sycl::range<3> grid_range;
+    sycl::range<1> flat_range;
+
+    sycl::buffer<FP, 1> bufBx, bufBy, bufBz;
+    sycl::buffer<FP, 1> bufEx, bufEy, bufEz;
+    sycl::buffer<FP, 1> bufJx, bufJy, bufJz;
 
     sycl::queue q;
     DevicePreference device_preference;
-    
+
+    inline std::size_t linear_index(int k, int j, int i) const {
+        return static_cast<std::size_t>(k) * static_cast<std::size_t>(Nj) * static_cast<std::size_t>(Ni)
+             + static_cast<std::size_t>(j) * static_cast<std::size_t>(Ni)
+             + static_cast<std::size_t>(i);
+    }
+
     void update_E();
     void update_B();
     void zero_fields();
@@ -35,8 +44,8 @@ public:
     FDTD(Parameters _parameters, FP _dt, DevicePreference preference = DevicePreference::AUTO);
     virtual ~FDTD() = default;
 
-    sycl::buffer<FP, 3>& get_field_buffer(Component this_field);
-    
+    sycl::buffer<FP, 1>& get_field_buffer(Component this_field);
+
     sycl::queue& get_queue() { return q; }
 
     virtual void update_fields();

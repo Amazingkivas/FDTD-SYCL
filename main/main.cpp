@@ -5,6 +5,7 @@
 #include <vector>
 #include <stdexcept>
 #include <string>
+#include <cstddef>
 
 #include "FDTD_sycl.h"
 
@@ -79,9 +80,13 @@ void spherical_wave(int n, int it, DevicePreference preference = DevicePreferenc
                                         static_cast<double>(k) * params.dz,
                                         time_val);
                 
-                Jx_acc[k][j][i] = value;
-                Jy_acc[k][j][i] = value;
-                Jz_acc[k][j][i] = value;
+                std::size_t idx = static_cast<std::size_t>(k) * static_cast<std::size_t>(params.Nj) * static_cast<std::size_t>(params.Ni)
+                                + static_cast<std::size_t>(j) * static_cast<std::size_t>(params.Ni)
+                                + static_cast<std::size_t>(i);
+
+                Jx_acc[idx] = value;
+                Jy_acc[idx] = value;
+                Jz_acc[idx] = value;
             });
         });
 
@@ -105,8 +110,11 @@ void spherical_wave(int n, int it, DevicePreference preference = DevicePreferenc
 
     for (int j = params.Nj / 2 - 5; j < params.Nj/2 + 5; j++) {
         for (int k = params.Nk/2 - 5; k < params.Nk/2 + 5; k++) {
+            std::size_t idx = static_cast<std::size_t>(k) * static_cast<std::size_t>(params.Nj) * static_cast<std::size_t>(params.Ni)
+                            + static_cast<std::size_t>(j) * static_cast<std::size_t>(params.Ni)
+                            + static_cast<std::size_t>(i);
             std::cout << std::setw(12) << std::fixed << std::setprecision(5) 
-                      << Ex_host_acc[i][j][k];
+                      << Ex_host_acc[idx];
         }
         std::cout << std::endl;
     }

@@ -1,6 +1,7 @@
 #include "FDTD_sycl.h"
 
 #include <iostream>
+#include <cstddef>
 #include <sycl/CL/sycl.hpp>
 #include <stdexcept>
 
@@ -11,25 +12,27 @@ AllDevices node;
 FDTD::FDTD(Parameters _parameters, FP _dt, DevicePreference preference)
     : parameters(_parameters), dt(_dt),
       Ni(_parameters.Ni), Nj(_parameters.Nj), Nk(_parameters.Nk),
+      total_size(static_cast<std::size_t>(Ni) * static_cast<std::size_t>(Nj) * static_cast<std::size_t>(Nk)),
       grid_range(_parameters.Nk, _parameters.Nj, _parameters.Ni),
-      Jx(Ni * Nj * Nk),
-      Jy(Ni * Nj * Nk),
-      Jz(Ni * Nj * Nk),
-      Ex(Ni * Nj * Nk),
-      Ey(Ni * Nj * Nk),
-      Ez(Ni * Nj * Nk),
-      Bx(Ni * Nj * Nk),
-      By(Ni * Nj * Nk),
-      Bz(Ni * Nj * Nk),
-      bufJx(Jx.data(), grid_range),
-      bufJy(Jy.data(), grid_range),
-      bufJz(Jz.data(), grid_range),
-      bufEx(Ex.data(), grid_range),
-      bufEy(Ey.data(), grid_range),
-      bufEz(Ez.data(), grid_range),
-      bufBx(Bx.data(), grid_range),
-      bufBy(By.data(), grid_range),
-      bufBz(Bz.data(), grid_range),
+      flat_range(total_size),
+      Jx(total_size),
+      Jy(total_size),
+      Jz(total_size),
+      Ex(total_size),
+      Ey(total_size),
+      Ez(total_size),
+      Bx(total_size),
+      By(total_size),
+      Bz(total_size),
+      bufJx(Jx.data(), flat_range),
+      bufJy(Jy.data(), flat_range),
+      bufJz(Jz.data(), flat_range),
+      bufEx(Ex.data(), flat_range),
+      bufEy(Ey.data(), flat_range),
+      bufEz(Ez.data(), flat_range),
+      bufBx(Bx.data(), flat_range),
+      bufBy(By.data(), flat_range),
+      bufBz(Bz.data(), flat_range),
       q(select_queue(preference)),
       device_preference(preference)
 {
@@ -71,15 +74,18 @@ void FDTD::zero_fields() {
         auto Bz_acc = bufBz.get_access<sycl::access::mode::write>(h);
 
         h.parallel_for(grid_range, [=](sycl::item<3> item) {
-            int k = item[0];
-            int j = item[1];
-            int i = item[2];
-            Ex_acc[k][j][i] = 0.0;
-            Ey_acc[k][j][i] = 0.0;
-            Ez_acc[k][j][i] = 0.0;
-            Bx_acc[k][j][i] = 0.0;
-            By_acc[k][j][i] = 0.0;
-            Bz_acc[k][j][i] = 0.0;
+            const int k = static_cast<int>(item[0]);
+            const int j = static_cast<int>(item[1]);
+            const int i = static_cast<int>(item[2]);
+            const std::size_t idx = static_cast<std::size_t>(k) * static_cast<std::size_t>(Nj) * static_cast<std::size_t>(Ni)
+                                  + static_cast<std::size_t>(j) * static_cast<std::size_t>(Ni)
+                                  + static_cast<std::size_t>(i);
+            Ex_acc[idx] = 0.0;
+            Ey_acc[idx] = 0.0;
+            Ez_acc[idx] = 0.0;
+            Bx_acc[idx] = 0.0;
+            By_acc[idx] = 0.0;
+            Bz_acc[idx] = 0.0;
         });
     };
 
@@ -93,12 +99,15 @@ void FDTD::zeroed_currents() {
         auto Jz_acc = bufJz.get_access<sycl::access::mode::write>(h);
 
         h.parallel_for(grid_range, [=](sycl::item<3> item) {
-            int k = item[0];
-            int j = item[1];
-            int i = item[2];
-            Jx_acc[k][j][i] = 0.0;
-            Jy_acc[k][j][i] = 0.0;
-            Jz_acc[k][j][i] = 0.0;
+            const int k = static_cast<int>(item[0]);
+            const int j = static_cast<int>(item[1]);
+            const int i = static_cast<int>(item[2]);
+            const std::size_t idx = static_cast<std::size_t>(k) * static_cast<std::size_t>(Nj) * static_cast<std::size_t>(Ni)
+                                  + static_cast<std::size_t>(j) * static_cast<std::size_t>(Ni)
+                                  + static_cast<std::size_t>(i);
+            Jx_acc[idx] = 0.0;
+            Jy_acc[idx] = 0.0;
+            Jz_acc[idx] = 0.0;
         });
     };
 
@@ -122,18 +131,25 @@ void FDTD::update_B() {
         auto Bz_acc = bufBz.get_access<sycl::access::mode::read_write>(h);
 
         h.parallel_for(range, start, [=](sycl::item<3> id) {
-            int k = id[0], j = id[1], i = id[2];
+            const int k = static_cast<int>(id[0]);
+            const int j = static_cast<int>(id[1]);
+            const int i = static_cast<int>(id[2]);
 
-            int k_next = applyPeriodic(k + 1, l_Nk);
-            int j_next = applyPeriodic(j + 1, l_Nj);
-            int i_next = applyPeriodic(i + 1, l_Ni);
+            const int k_next = applyPeriodic(k + 1, l_Nk);
+            const int j_next = applyPeriodic(j + 1, l_Nj);
+            const int i_next = applyPeriodic(i + 1, l_Ni);
 
-            Bx_acc[k][j][i] += l_coef_B_dz * (Ey_acc[k_next][j][i] - Ey_acc[k][j][i])
-                              - l_coef_B_dy * (Ez_acc[k][j_next][i] - Ez_acc[k][j][i]);
-            By_acc[k][j][i] += l_coef_B_dx * (Ez_acc[k][j][i_next] - Ez_acc[k][j][i])
-                              - l_coef_B_dz * (Ex_acc[k_next][j][i] - Ex_acc[k][j][i]);
-            Bz_acc[k][j][i] += l_coef_B_dy * (Ex_acc[k][j_next][i] - Ex_acc[k][j][i])
-                              - l_coef_B_dx * (Ey_acc[k][j][i_next] - Ey_acc[k][j][i]);
+            const std::size_t idx = static_cast<std::size_t>(k) * l_Nj * l_Ni + static_cast<std::size_t>(j) * l_Ni + static_cast<std::size_t>(i);
+            const std::size_t idx_kn = static_cast<std::size_t>(k_next) * l_Nj * l_Ni + static_cast<std::size_t>(j) * l_Ni + static_cast<std::size_t>(i);
+            const std::size_t idx_jn = static_cast<std::size_t>(k) * l_Nj * l_Ni + static_cast<std::size_t>(j_next) * l_Ni + static_cast<std::size_t>(i);
+            const std::size_t idx_in = static_cast<std::size_t>(k) * l_Nj * l_Ni + static_cast<std::size_t>(j) * l_Ni + static_cast<std::size_t>(i_next);
+
+            Bx_acc[idx] += l_coef_B_dz * (Ey_acc[idx_kn] - Ey_acc[idx])
+                         - l_coef_B_dy * (Ez_acc[idx_jn] - Ez_acc[idx]);
+            By_acc[idx] += l_coef_B_dx * (Ez_acc[idx_in] - Ez_acc[idx])
+                         - l_coef_B_dz * (Ex_acc[idx_kn] - Ex_acc[idx]);
+            Bz_acc[idx] += l_coef_B_dy * (Ex_acc[idx_jn] - Ex_acc[idx])
+                         - l_coef_B_dx * (Ey_acc[idx_in] - Ey_acc[idx]);
         });
     };
 
@@ -160,23 +176,30 @@ void FDTD::update_E() {
         auto Ez_acc = bufEz.get_access<sycl::access::mode::read_write>(h);
 
         h.parallel_for(range, start, [=](sycl::item<3> id) {
-            int k = id[0], j = id[1], i = id[2];
+            const int k = static_cast<int>(id[0]);
+            const int j = static_cast<int>(id[1]);
+            const int i = static_cast<int>(id[2]);
 
-            int k_pred = applyPeriodic(k - 1, l_Nk);
-            int j_pred = applyPeriodic(j - 1, l_Nj);
-            int i_pred = applyPeriodic(i - 1, l_Ni);
+            const int k_pred = applyPeriodic(k - 1, l_Nk);
+            const int j_pred = applyPeriodic(j - 1, l_Nj);
+            const int i_pred = applyPeriodic(i - 1, l_Ni);
 
-            Ex_acc[k][j][i] += l_cur_coef * Jx_acc[k][j][i]
-                              + l_coef_E_dy * (Bz_acc[k][j][i] - Bz_acc[k][j_pred][i])
-                              - l_coef_E_dz * (By_acc[k][j][i] - By_acc[k_pred][j][i]);
+            const std::size_t idx = static_cast<std::size_t>(k) * l_Nj * l_Ni + static_cast<std::size_t>(j) * l_Ni + static_cast<std::size_t>(i);
+            const std::size_t idx_kp = static_cast<std::size_t>(k_pred) * l_Nj * l_Ni + static_cast<std::size_t>(j) * l_Ni + static_cast<std::size_t>(i);
+            const std::size_t idx_jp = static_cast<std::size_t>(k) * l_Nj * l_Ni + static_cast<std::size_t>(j_pred) * l_Ni + static_cast<std::size_t>(i);
+            const std::size_t idx_ip = static_cast<std::size_t>(k) * l_Nj * l_Ni + static_cast<std::size_t>(j) * l_Ni + static_cast<std::size_t>(i_pred);
 
-            Ey_acc[k][j][i] += l_cur_coef * Jy_acc[k][j][i]
-                              + l_coef_E_dz * (Bx_acc[k][j][i] - Bx_acc[k_pred][j][i])
-                              - l_coef_E_dx * (Bz_acc[k][j][i] - Bz_acc[k][j][i_pred]);
+            Ex_acc[idx] += l_cur_coef * Jx_acc[idx]
+                         + l_coef_E_dy * (Bz_acc[idx] - Bz_acc[idx_jp])
+                         - l_coef_E_dz * (By_acc[idx] - By_acc[idx_kp]);
 
-            Ez_acc[k][j][i] += l_cur_coef * Jz_acc[k][j][i]
-                              + l_coef_E_dx * (By_acc[k][j][i] - By_acc[k][j][i_pred])
-                              - l_coef_E_dy * (Bx_acc[k][j][i] - Bx_acc[k][j_pred][i]);
+            Ey_acc[idx] += l_cur_coef * Jy_acc[idx]
+                         + l_coef_E_dz * (Bx_acc[idx] - Bx_acc[idx_kp])
+                         - l_coef_E_dx * (Bz_acc[idx] - Bz_acc[idx_ip]);
+
+            Ez_acc[idx] += l_cur_coef * Jz_acc[idx]
+                         + l_coef_E_dx * (By_acc[idx] - By_acc[idx_ip])
+                         - l_coef_E_dy * (Bx_acc[idx] - Bx_acc[idx_jp]);
         });
     };
 
@@ -189,7 +212,7 @@ void FDTD::update_fields() {
     update_B();
 }
 
-sycl::buffer<FP, 3>& FDTD::get_field_buffer(Component this_field) {
+sycl::buffer<FP, 1>& FDTD::get_field_buffer(Component this_field) {
     switch (this_field) {
         case Component::JX: return bufJx;
         case Component::JY: return bufJy;
