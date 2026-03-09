@@ -3,12 +3,14 @@
 #include <cmath>
 #include <chrono>
 #include <vector>
+#include <stdexcept>
+#include <string>
 
 #include "FDTD_sycl.h"
 
 using namespace FDTD_sycl;
 
-void spherical_wave(int n, int it, std::string base_path = "") {
+void spherical_wave(int n, int it, DevicePreference preference = DevicePreference::AUTO, std::string base_path = "") {
     CurrentParameters cur_param {
         8,
         4,
@@ -39,7 +41,7 @@ void spherical_wave(int n, int it, std::string base_path = "") {
         d, d, d
     };
 
-    FDTD_sycl::FDTD method(params, cur_param.dt);
+    FDTD_sycl::FDTD method(params, cur_param.dt, preference);
 
     int cur_time = std::min(cur_param.iterations, it);
 
@@ -114,20 +116,43 @@ void spherical_wave(int n, int it, std::string base_path = "") {
 int main(int argc, char* argv[]) {
 
     std::vector<char*> arguments(argv, argv + argc);
-    if (argc == 1) {
-        int N = 512;
-        int Iterations = 25;
-        spherical_wave(N, Iterations, "../../");
-    } else if (argc == 3) {
-        int N = std::atoi(arguments[1]);
-        int Iterations = std::atoi(arguments[2]);
-        std::cout << N << " | " << Iterations << std::endl;
-        spherical_wave(N, Iterations, "../../");
-    } else {
-        std::cout << "ERROR: Incorrect number of parameters" << std::endl;
-        exit(1);
-    }
+    auto parse_device = [](const std::string& device) {
+        if (device == "cpu") {
+            return DevicePreference::CPU;
+        }
+        if (device == "gpu") {
+            return DevicePreference::GPU;
+        }
+        if (device == "auto") {
+            return DevicePreference::AUTO;
+        }
+        throw std::invalid_argument("ERROR: device must be one of: auto, cpu, gpu");
+    };
 
+    try {
+        if (argc == 1) {
+            int N = 512;
+            int Iterations = 25;
+            spherical_wave(N, Iterations, DevicePreference::AUTO, "../../");
+        } else if (argc == 3) {
+            int N = std::atoi(arguments[1]);
+            int Iterations = std::atoi(arguments[2]);
+            std::cout << N << " | " << Iterations << std::endl;
+            spherical_wave(N, Iterations, DevicePreference::AUTO, "../../");
+        } else if (argc == 4) {
+            int N = std::atoi(arguments[1]);
+            int Iterations = std::atoi(arguments[2]);
+            DevicePreference preference = parse_device(arguments[3]);
+            std::cout << N << " | " << Iterations << " | " << arguments[3] << std::endl;
+            spherical_wave(N, Iterations, preference, "../../");
+        } else {
+            std::cout << "Usage: " << arguments[0] << " [N Iterations [auto|cpu|gpu]]" << std::endl;
+            return 1;
+        }
+    } catch (const std::exception& ex) {
+        std::cout << ex.what() << std::endl;
+        return 1;
+    }
 
     return 0;
 }

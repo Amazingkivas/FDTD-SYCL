@@ -8,7 +8,7 @@ namespace FDTD_sycl {
 
 AllDevices node;
 
-FDTD::FDTD(Parameters _parameters, FP _dt)
+FDTD::FDTD(Parameters _parameters, FP _dt, DevicePreference preference)
     : parameters(_parameters), dt(_dt),
       Ni(_parameters.Ni), Nj(_parameters.Nj), Nk(_parameters.Nk),
       grid_range(_parameters.Nk, _parameters.Nj, _parameters.Ni),
@@ -29,14 +29,16 @@ FDTD::FDTD(Parameters _parameters, FP _dt)
       bufEz(Ez.data(), grid_range),
       bufBx(Bx.data(), grid_range),
       bufBy(By.data(), grid_range),
-      bufBz(Bz.data(), grid_range)
+      bufBz(Bz.data(), grid_range),
+      q(select_queue(preference)),
+      device_preference(preference)
 {
     if (Ni <= 0 || Nj <= 0 || Nk <= 0 || dt <= 0) {
         throw std::invalid_argument("ERROR: Invalid grid size (must be > 0).");
     }
 
     std::cout << "SYCL FDTD running on device: "
-              << node.cpu_device.get_device().get_info<sycl::info::device::name>()
+              << q.get_device().get_info<sycl::info::device::name>()
               << std::endl;
 
     const FP cdt = FDTD_const::C * dt;
@@ -81,7 +83,7 @@ void FDTD::zero_fields() {
         });
     };
 
-    node.cpu_device.submit(kernel).wait_and_throw();
+    q.submit(kernel).wait_and_throw();
 }
 
 void FDTD::zeroed_currents() {
@@ -100,7 +102,7 @@ void FDTD::zeroed_currents() {
         });
     };
 
-    node.cpu_device.submit(kernel).wait_and_throw();
+    q.submit(kernel).wait_and_throw();
 }
 
 void FDTD::update_B() {
@@ -135,7 +137,7 @@ void FDTD::update_B() {
         });
     };
 
-    node.cpu_device.submit(kernel).wait_and_throw();
+    q.submit(kernel).wait_and_throw();
 }
 
 void FDTD::update_E() {
@@ -178,7 +180,7 @@ void FDTD::update_E() {
         });
     };
 
-    node.cpu_device.submit(kernel).wait_and_throw();
+    q.submit(kernel).wait_and_throw();
 }
 
 void FDTD::update_fields() {

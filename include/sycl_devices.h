@@ -4,6 +4,8 @@
 
 namespace FDTD_sycl {
 
+    enum class DevicePreference { AUTO, CPU, GPU };
+
     template <typename T>
     using sycl_vector = std::vector<T, sycl::usm_allocator<T, sycl::usm::alloc::shared>>;
 
@@ -25,5 +27,17 @@ namespace FDTD_sycl {
     };
 
     extern AllDevices node;
+
+    inline sycl::queue& select_queue(DevicePreference preference) {
+        switch (preference) {
+            case DevicePreference::CPU:
+                return node.cpu_device;
+            case DevicePreference::GPU:
+                return node.gpu_device;
+            case DevicePreference::AUTO:
+            default:
+                return node.gpu_device;
+        }
+    }
 
 } // namespace FDTD_sycl

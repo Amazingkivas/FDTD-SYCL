@@ -25,13 +25,14 @@ protected:
     sycl::buffer<FP, 3> bufJx, bufJy, bufJz;
 
     sycl::queue q;
+    DevicePreference device_preference;
     
     void update_E();
     void update_B();
     void zero_fields();
 
 public:
-    FDTD(Parameters _parameters, FP _dt);
+    FDTD(Parameters _parameters, FP _dt, DevicePreference preference = DevicePreference::AUTO);
     virtual ~FDTD() = default;
 
     sycl::buffer<FP, 3>& get_field_buffer(Component this_field);
